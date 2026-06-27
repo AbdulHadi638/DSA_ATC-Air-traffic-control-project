@@ -58,9 +58,13 @@ We also built a live radar dashboard that runs in your browser and updates autom
 1. Clone or download this repo
 2. Open Visual Studio and create a new empty C++ project
 3. Add all `.h` and `.cpp` files to the project
-4. Make sure `flights.csv` is in the **same folder as your `.cpp` files**
-5. Press **F5** to build and run
-6. Use the menu that appears to control the simulation
+4. flights.csv is not included due to file size.
+Download it from Kaggle:
+https://www.kaggle.com/datasets/usdot/flight-delays?select=flights.csv
+Then place it in the same folder as your source files.
+5. Make sure `flights.csv` is in the **same folder as your `.cpp` files**
+6. Press **F5** to build and run
+7. Use the menu that appears to control the simulation
 
 ### Live Radar Dashboard (Browser)
 
