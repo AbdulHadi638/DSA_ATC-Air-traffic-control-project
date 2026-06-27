@@ -1,6 +1,6 @@
 # ✈️ Air Traffic Control (ATC) Simulation System
 
-**DSA Project — CE-4B**  
+**DSA Project — CE-4B FAST NUCES ISLAMABAD**  
 
 ---
 
