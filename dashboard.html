@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>ATC Dashboard — JFK</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #060e06;
+  color: #7fff7f;
+  font-family: 'Courier New', monospace;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 52px 1fr;
+  grid-template-columns: 1fr 240px;
+  gap: 8px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+/* TOP BAR */
+#topbar {
+  grid-column: 1 / 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #1a3a1a;
+  padding-bottom: 8px;
+}
+#topbar h1 { font-size: 13px; color: #4fa44f; letter-spacing: 3px; flex: 1; }
+.stat {
+  background: #0d1a0d;
+  border: 1px solid #1a3a1a;
+  border-radius: 4px;
+  padding: 3px 12px;
+  text-align: center;
+  min-width: 72px;
+}
+.stat .sl { font-size: 8px; color: #4fa44f; letter-spacing: 1px; display: block; }
+.stat .sv { font-size: 17px; color: #7fff7f; font-weight: bold; display: block; }
+.stat.emrg { border-color: #4a1515; }
+.stat.emrg .sl { color: #a44f4f; }
+.stat.emrg .sv { color: #ff6666; }
+
+/* RADAR */
+#radar-wrap {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+canvas { display: block; border-radius: 50%; }
+
+/* SIDEBAR */
+#sidebar {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+.panel {
+  background: #0d1a0d;
+  border: 1px solid #1a3a1a;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.panel h3 {
+  font-size: 9px;
+  color: #4fa44f;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #1a3a1a;
+  padding-bottom: 5px;
+  margin-bottom: 8px;
+}
+.frow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  padding: 4px 0;
+  border-bottom: 1px solid #0a180a;
+  color: #5fa45f;
+}
+.frow.emrg { color: #ff6666; }
+.frow .fid { font-weight: bold; }
+.frow .fdist { font-size: 10px; color: #3a6a3a; }
+.frow.emrg .fdist { color: #993333; }
+.qitem { font-size: 11px; color: #5fa45f; padding: 3px 0; }
+.qarrow { color: #3a6a3a; }
+.empty { font-size: 10px; color: #2a4a2a; padding: 3px 0; }
+
+#footer {
+  grid-column: 1 / 3;
+  font-size: 9px;
+  color: #2a4a2a;
+  border-top: 1px solid #1a3a1a;
+  padding-top: 5px;
+  display: flex;
+  gap: 16px;
+}
+#dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #2a4a2a;
+  display: inline-block;
+  margin-right: 6px;
+  transition: background 0.2s;
+}
+#dot.on { background: #7fff7f; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>&#9992; ATC CONTROL — JFK</h1>
+  <div class="stat"><span class="sl">CYCLES</span><span class="sv" id="s-cyc">0</span></div>
+  <div class="stat"><span class="sl">LANDINGS</span><span class="sv" id="s-land">0</span></div>
+  <div class="stat"><span class="sl">TAKEOFFS</span><span class="sv" id="s-take">0</span></div>
+   <div class="stat"><span class="sl">IN AIR</span><span class="sv" id="s-air">0</span></div>
+  <div class="stat"><span class="sl">ON GROUND</span><span class="sv" id="s-gnd">0</span></div>
+</div>
+
+<div id="radar-wrap">
+  <canvas id="rc" width="480" height="480"></canvas>
+</div>
+
+<div id="sidebar">
+  <div class="panel">
+    <h3>Landing queue</h3>
+    <div id="land-list"><div class="empty">No aircraft</div></div>
+  </div>
+  <div class="panel">
+    <h3>Takeoff queue</h3>
+    <div id="take-list"><div class="empty">Queue empty</div></div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('rc');
+const ctx = canvas.getContext('2d');
+const W=480,H=480,CX=240,CY=240,R=225;
+let sweep=0, planes=[], trails={};
+
+function drawRadar(){
+  ctx.clearRect(0,0,W,H);
+  // black circle bg
+  ctx.fillStyle='#060e06';
+  ctx.beginPath();ctx.arc(CX,CY,R,0,Math.PI*2);ctx.fill();
+
+  // rings
+  for(let i=1;i<=4;i++){
+    ctx.beginPath();ctx.arc(CX,CY,R*i/4,0,Math.PI*2);
+    ctx.strokeStyle='#0d280d';ctx.lineWidth=1;ctx.stroke();
+  }
+  // crosshairs
+  ctx.strokeStyle='#0d280d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(CX-R,CY);ctx.lineTo(CX+R,CY);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(CX,CY-R);ctx.lineTo(CX,CY+R);ctx.stroke();
+
+  // outer border
+  ctx.beginPath();ctx.arc(CX,CY,R,0,Math.PI*2);
+  ctx.strokeStyle='#1a4a1a';ctx.lineWidth=2;ctx.stroke();
+
+  // sweep
+  const sr=sweep*Math.PI/180;
+  ctx.save();ctx.translate(CX,CY);ctx.rotate(sr);
+  const lg=ctx.createLinearGradient(0,0,R,0);
+  lg.addColorStop(0,'rgba(0,255,0,0.18)');
+  lg.addColorStop(1,'rgba(0,255,0,0)');
+  ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,R,-0.65,0);ctx.closePath();
+  ctx.fillStyle=lg;ctx.fill();
+  ctx.restore();
+
+  // sweep line
+  ctx.save();ctx.translate(CX,CY);ctx.rotate(sr);
+  ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(R,0);
+  ctx.strokeStyle='rgba(0,255,80,0.75)';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.restore();
+
+  // range labels
+  ctx.font='9px Courier New';ctx.fillStyle='#1a4a1a';
+  ctx.fillText('500km',CX+4,CY-R/4+10);
+  ctx.fillText('1000km',CX+4,CY-R/2+10);
+  ctx.fillText('2000km',CX+4,CY-R*0.75+10);
+
+  // blips
+  planes.forEach(p=>{
+    const px=CX+p.x*R, py=CY+p.y*R;
+    // trail
+    if(!trails[p.id])trails[p.id]=[];
+    const pa=Math.atan2(p.y,p.x)*180/Math.PI+180;
+    const diff=((pa-sweep)%360+360)%360;
+    if(diff<12){
+      if(trails[p.id].length>5)trails[p.id].shift();
+      trails[p.id].push({x:px,y:py});
+    }
+    trails[p.id].forEach((t,ti)=>{
+      ctx.beginPath();ctx.arc(t.x,t.y,2,0,Math.PI*2);
+      ctx.fillStyle=`rgba(0,255,0,${0.07*(ti+1)})`;ctx.fill();
+    });
+    // emergency pulse
+    if(p.emergency){
+      const pulse=0.5+0.5*Math.sin(Date.now()/200);
+      ctx.beginPath();ctx.arc(px,py,11+pulse*4,0,Math.PI*2);
+      ctx.strokeStyle=`rgba(255,68,68,${0.25+pulse*0.35})`;
+      ctx.lineWidth=1.5;ctx.stroke();
+    }
+    // dot
+    ctx.beginPath();ctx.arc(px,py,p.emergency?6:4,0,Math.PI*2);
+    ctx.fillStyle=p.emergency?'#ff4444':'#00ff44';ctx.fill();
+    // label
+    ctx.font='10px Courier New';
+    ctx.fillStyle=p.emergency?'#ff9999':'#7fff7f';
+    ctx.fillText(p.id,px+8,py-4);
+    ctx.font='8px Courier New';
+    ctx.fillStyle=p.emergency?'#994444':'#2a5a2a';
+    ctx.fillText(p.distance+'km',px+8,py+7);
+  });
+
+  // JFK center
+  ctx.beginPath();ctx.arc(CX,CY,5,0,Math.PI*2);
+  ctx.fillStyle='#4fa44f';ctx.fill();
+  ctx.font='bold 11px Courier New';
+  ctx.fillStyle='#7fff7f';
+  ctx.fillText('JFK',CX+8,CY-5);
+}
+
+function tick(){
+  sweep=(sweep+1.2)%360;
+  drawRadar();
+  requestAnimationFrame(tick);
+}
+tick();
+
+function loadState(){
+  fetch('state.json?t='+Date.now())
+  .then(r=>{ if(!r.ok)throw new Error(); return r.json(); })
+  .then(data=>{
+    // stats
+    document.getElementById('s-cyc').textContent  = data.cycleNumber||0;
+    document.getElementById('s-land').textContent = data.totalLandings||0;
+    document.getElementById('s-take').textContent = data.totalTakeoffs||0;
+       document.getElementById('s-air').textContent  = data.airQueueSize||0;
+    document.getElementById('s-gnd').textContent  = data.groundQueueSize||0;
+
+    // radar
+    planes = data.airQueue||[];
+    const ids=new Set(planes.map(p=>p.id));
+    Object.keys(trails).forEach(id=>{ if(!ids.has(id))delete trails[id]; });
+
+    // landing queue
+    const ll=document.getElementById('land-list');
+    if(!planes.length){
+      ll.innerHTML='<div class="empty">No aircraft</div>';
+    } else {
+      ll.innerHTML=planes.map(p=>`
+        <div class="frow ${p.emergency?'emrg':''}">
+          <span class="fid">${p.id}</span>
+          <span class="fdist">${p.emergency?'⚠ EMRG':p.distance+' km'}</span>
+        </div>`).join('');
+    }
+
+    // takeoff queue
+    const tl=document.getElementById('take-list');
+    const gq=data.groundQueue||[];
+    if(!gq.length){
+      tl.innerHTML='<div class="empty">Queue empty</div>';
+    } else {
+      tl.innerHTML=gq.map(id=>`
+        <div class="qitem"><span class="qarrow">→ </span>${id}</div>
+      `).join('');
+    }
+
+    // flash dot
+    const dot=document.getElementById('dot');
+    dot.classList.add('on');
+    setTimeout(()=>dot.classList.remove('on'),300);
+    document.getElementById('last').textContent='Last update: '+new Date().toLocaleTimeString();
+  })
+  .catch(()=>{
+    document.getElementById('last').textContent='Waiting for state.json — run your C++ program first';
+  });
+}
+
+loadState();
+setInterval(loadState,2000);
+</script>
+
+</body>
+</html>
